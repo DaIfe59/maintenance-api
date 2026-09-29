@@ -1,106 +1,205 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { Op } from "sequelize";
 
-const dataDir = path.resolve("data");
-const filePath = path.join(dataDir, "equipment.json");
+import {
+  Equipment,
+  EquipmentPassport,
+  Site
+} from "../../models/index.js";
 
-async function ensureFile() {
-  await mkdir(dataDir, { recursive: true });
+const sortFields = {
+  name: "name",
+  type: "type",
+  serialNumber: "serialNumber",
+  status: "status",
+  installedAt: "installedAt"
+};
 
-  try {
-    await readFile(filePath, "utf8");
-  } catch (error) {
-    if (error.code !== "ENOENT") {
-      throw error;
+function mapEquipment(item) {
+  if (!item) {
+    return null;
+  }
+
+  const equipment = item.toJSON();
+
+  return {
+    id: equipment.id,
+    name: equipment.name,
+    type: equipment.type,
+    serialNumber: equipment.serialNumber,
+    location: equipment.site
+      ? {
+          lat: equipment.site.latitude,
+          lon: equipment.site.longitude
+        }
+      : null,
+    status: equipment.status,
+    installedAt: equipment.installedAt,
+    createdAt: equipment.createdAt,
+    updatedAt: equipment.updatedAt,
+    site: equipment.site || null,
+    passport: equipment.passport || null
+  };
+}
+
+const include = [
+  {
+    model: Site,
+    as: "site",
+    attributes: [
+      "id",
+      "name",
+      "code",
+      "region",
+      "latitude",
+      "longitude"
+    ]
+  },
+  {
+    model: EquipmentPassport,
+    as: "passport",
+    attributes: [
+      "id",
+      "manufacturer",
+      "model",
+      "nominalPower",
+      "lastVerificationAt"
+    ]
+  }
+];
+
+export async function findAll(options = {}) {
+  const where = {};
+
+  if (options.status) {
+    where.status = options.status;
+  }
+
+  if (options.type) {
+    where.type = options.type;
+  }
+
+  if (options.installedFrom || options.installedTo) {
+    where.installedAt = {};
+
+    if (options.installedFrom) {
+      where.installedAt[Op.gte] =
+        new Date(options.installedFrom);
     }
 
-    await writeFile(filePath, "[]", "utf8");
+    if (options.installedTo) {
+      where.installedAt[Op.lte] =
+        new Date(options.installedTo);
+    }
   }
-}
 
-async function readEquipment() {
-  await ensureFile();
+  const page = Number(options.page || 1);
+  const limit = Number(options.limit || 10);
+  const offset = (page - 1) * limit;
 
-  const content = await readFile(filePath, "utf8");
+  const sortBy =
+    sortFields[options.sortBy] || "name";
 
-  try {
-    return JSON.parse(content);
-  } catch {
-    throw new Error("Файл оборудования содержит некорректный JSON.");
-  }
-}
+  const sortOrder =
+    options.sortOrder === "desc"
+      ? "DESC"
+      : "ASC";
 
-async function writeEquipment(equipment) {
-  await ensureFile();
+  const result = await Equipment.findAndCountAll({
+    where,
+    include,
+    distinct: true,
+    limit,
+    offset,
+    order: [[sortBy, sortOrder]]
+  });
 
-  await writeFile(
-    filePath,
-    JSON.stringify(equipment, null, 2),
-    "utf8"
-  );
-}
-
-export async function findAll() {
-  return readEquipment();
+  return {
+    data: result.rows.map(mapEquipment),
+    meta: {
+      total: result.count,
+      page,
+      limit
+    }
+  };
 }
 
 export async function findById(id) {
-  const equipment = await readEquipment();
+  const equipment = await Equipment.findByPk(id, {
+    include
+  });
 
-  return equipment.find((item) => item.id === id) || null;
+  return mapEquipment(equipment);
 }
 
-export async function findBySerialNumber(serialNumber) {
-  const equipment = await readEquipment();
+export async function findBySerialNumber(
+  serialNumber
+) {
+  const equipment = await Equipment.findOne({
+    where: {
+      serialNumber
+    },
+    include
+  });
 
-  return (
-    equipment.find(
-      (item) => item.serialNumber === serialNumber
-    ) || null
-  );
+  return mapEquipment(equipment);
 }
 
-export async function create(item) {
-  const equipment = await readEquipment();
+export async function create(item, siteId) {
+  const equipment = await Equipment.create({
+    id: item.id,
+    siteId,
+    name: item.name,
+    type: item.type,
+    serialNumber: item.serialNumber,
+    status: item.status,
+    installedAt: item.installedAt
+  });
 
-  equipment.push(item);
-
-  await writeEquipment(equipment);
-
-  return item;
+  return findById(equipment.id);
 }
 
-export async function update(id, changes) {
-  const equipment = await readEquipment();
+export async function update(id, changes, siteId) {
+  const equipment = await Equipment.findByPk(id);
 
-  const index = equipment.findIndex((item) => item.id === id);
-
-  if (index === -1) {
+  if (!equipment) {
     return null;
   }
 
-  equipment[index] = {
-    ...equipment[index],
+  const updateData = {
     ...changes
   };
 
-  await writeEquipment(equipment);
+  if (siteId) {
+    updateData.siteId = siteId;
+  }
 
-  return equipment[index];
+  await equipment.update(updateData);
+
+  return findById(id);
 }
 
 export async function remove(id) {
-  const equipment = await readEquipment();
+  const equipment = await Equipment.findByPk(id);
 
-  const index = equipment.findIndex((item) => item.id === id);
-
-  if (index === -1) {
+  if (!equipment) {
     return null;
   }
 
-  const [removed] = equipment.splice(index, 1);
+  await equipment.destroy();
 
-  await writeEquipment(equipment);
+  return equipment.toJSON();
+}
 
-  return removed;
+export async function countOpenRequests(id) {
+  const { MaintenanceRequest } =
+    await import("../../models/index.js");
+
+  return MaintenanceRequest.count({
+    where: {
+      equipmentId: id,
+      status: {
+        [Op.notIn]: ["done", "rejected"]
+      }
+    }
+  });
 }

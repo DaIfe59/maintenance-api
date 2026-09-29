@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import analyticsRoutes from "./routes/analyticsRoutes.js";
 
 import config from "./config/config.js";
 import equipmentRoutes from "./routes/equipmentRoutes.js";
@@ -56,6 +57,8 @@ app.get("/api/health", (req, res) => {
     }
   });
 });
+
+app.use("/api", analyticsRoutes);
 
 app.use("/api/equipment", equipmentRoutes);
 app.use("/api/requests", requestsRoutes);

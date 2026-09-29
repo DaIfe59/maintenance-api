@@ -1,17 +1,9 @@
-import "dotenv/config";
+import dotenv from "dotenv";
 
-function getNumber(value, fallback, name, minimum) {
-  const result = Number(value ?? fallback);
-
-  if (!Number.isFinite(result) || result < minimum) {
-    throw new Error(`${name} должен быть числом не меньше ${minimum}.`);
-  }
-
-  return result;
-}
+dotenv.config();
 
 const config = {
-  port: getNumber(process.env.PORT, 3000, "PORT", 1),
+  port: Number(process.env.PORT || 3000),
   nodeEnv: process.env.NODE_ENV || "development",
 
   corsOrigins: (process.env.CORS_ORIGINS || "")
@@ -19,46 +11,39 @@ const config = {
     .map((origin) => origin.trim())
     .filter(Boolean),
 
-  rateLimitWindowMs: getNumber(
-    process.env.RATE_LIMIT_WINDOW_MS,
-    900000,
-    "RATE_LIMIT_WINDOW_MS",
-    1000
+  rateLimitWindowMs: Number(
+    process.env.RATE_LIMIT_WINDOW_MS || 900000
   ),
 
-  rateLimitMax: getNumber(
-    process.env.RATE_LIMIT_MAX,
-    100,
-    "RATE_LIMIT_MAX",
-    1
+  rateLimitMax: Number(
+    process.env.RATE_LIMIT_MAX || 100
   ),
 
   weatherApiUrl:
     process.env.WEATHER_API_URL ||
     "https://api.open-meteo.com/v1/forecast",
 
-  requestTimeoutMs: getNumber(
-    process.env.REQUEST_TIMEOUT_MS,
-    5000,
-    "REQUEST_TIMEOUT_MS",
-    100
+  requestTimeoutMs: Number(
+    process.env.REQUEST_TIMEOUT_MS || 5000
   ),
 
-  weatherMaxPrecipitation: getNumber(
-    process.env.WEATHER_MAX_PRECIPITATION,
-    0,
-    "WEATHER_MAX_PRECIPITATION",
-    0
+  weatherMaxPrecipitation: Number(
+    process.env.WEATHER_MAX_PRECIPITATION || 0
   ),
 
-  weatherMaxWindSpeed: getNumber(
-    process.env.WEATHER_MAX_WIND_SPEED,
-    10,
-    "WEATHER_MAX_WIND_SPEED",
-    0
+  weatherMaxWindSpeed: Number(
+    process.env.WEATHER_MAX_WIND_SPEED || 10
   ),
 
-  logLevel: process.env.LOG_LEVEL || "info"
+  logLevel: process.env.LOG_LEVEL || "info",
+
+  dbHost: process.env.DB_HOST || "localhost",
+  dbPort: Number(process.env.DB_PORT || 5432),
+  dbName: process.env.DB_NAME || "maintenance",
+  dbUser: process.env.DB_USER || "maintenance",
+  dbPassword: process.env.DB_PASSWORD || "maintenance",
+  dbPoolMin: Number(process.env.DB_POOL_MIN || 0),
+  dbPoolMax: Number(process.env.DB_POOL_MAX || 10)
 };
 
 export default config;

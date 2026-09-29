@@ -6,7 +6,10 @@ import {
   createRequest,
   updateRequest,
   updateRequestStatus,
-  deleteRequest
+  deleteRequest,
+  getRequestHistory,
+  addRequestAssignee,
+  removeRequestAssignee
 } from "../controllers/requestsController.js";
 
 import { validate } from "../validators/validate.js";
@@ -38,6 +41,21 @@ router.post(
     body: createRequestSchema
   }),
   createRequest
+);
+
+router.post(
+  "/:id/assignees",
+  addRequestAssignee
+);
+
+router.delete(
+  "/:id/assignees/:userId",
+  removeRequestAssignee
+);
+
+router.get(
+  "/:id/history",
+  getRequestHistory
 );
 
 router.get(

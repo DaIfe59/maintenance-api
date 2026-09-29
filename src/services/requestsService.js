@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
-
 import * as requestsRepository from "../repositories/requestsRepository.js";
 import * as equipmentRepository from "../repositories/equipmentRepository.js";
-
-import {
-  ConflictError,
-  NotFoundError
-} from "../errors/AppError.js";
+import * as requestHistoryRepository from "../repositories/requestHistoryRepository.js";
+import sequelize from "../config/database.js";
+import { ConflictError, NotFoundError } from "../errors/AppError.js";
+import * as requestAssigneeRepository from "../repositories/requestAssigneeRepository.js";
+import { ValidationError } from "../errors/AppError.js";
 
 const allowedTransitions = {
   new: ["in_progress", "rejected"],
@@ -16,173 +15,112 @@ const allowedTransitions = {
 };
 
 export async function getRequestsList(options = {}) {
-  const requests = await requestsRepository.findAll();
-
-  let result = requests;
-
-  if (options.status) {
-    result = result.filter(
-      (item) => item.status === options.status
-    );
-  }
-
-  if (options.priority) {
-    result = result.filter(
-      (item) => item.priority === options.priority
-    );
-  }
-
-  if (options.equipmentId) {
-    result = result.filter(
-      (item) => item.equipmentId === options.equipmentId
-    );
-  }
-
-  if (options.createdFrom) {
-    result = result.filter(
-      (item) =>
-        new Date(item.createdAt) >=
-        new Date(options.createdFrom)
-    );
-  }
-
-  if (options.createdTo) {
-    result = result.filter(
-      (item) =>
-        new Date(item.createdAt) <=
-        new Date(options.createdTo)
-    );
-  }
-
-  if (options.plannedFrom) {
-    result = result.filter(
-      (item) =>
-        item.plannedAt &&
-        new Date(item.plannedAt) >=
-        new Date(options.plannedFrom)
-    );
-  }
-
-  if (options.plannedTo) {
-    result = result.filter(
-      (item) =>
-        item.plannedAt &&
-        new Date(item.plannedAt) <=
-        new Date(options.plannedTo)
-    );
-  }
-
-  const sortBy = options.sortBy || "createdAt";
-  const sortOrder = options.sortOrder || "asc";
-
-  result.sort((a, b) => {
-    const first = String(a[sortBy] ?? "");
-    const second = String(b[sortBy] ?? "");
-
-    const comparison = first.localeCompare(second);
-
-    return sortOrder === "asc"
-      ? comparison
-      : -comparison;
-  });
-
-  const page = options.page || 1;
-  const limit = options.limit || 10;
-
-  const total = result.length;
-  const start = (page - 1) * limit;
-
-  result = result.slice(start, start + limit);
-
-  return {
-    data: result,
-    meta: {
-      total,
-      page,
-      limit
-    }
-  };
+  return requestsRepository.findAll(options);
 }
 
 export async function getRequestById(id) {
   const request = await requestsRepository.findById(id);
 
   if (!request) {
-    throw new NotFoundError("Заявка не найдена.");
+    throw new NotFoundError("Заявка не найдена");
   }
 
   return request;
 }
 
-export async function getRequestsByEquipmentId(equipmentId) {
+export async function getRequestsByEquipmentId(equipmentId, options = {}) {
   const equipment = await equipmentRepository.findById(equipmentId);
 
   if (!equipment) {
-    throw new NotFoundError("Оборудование не найдено.");
+    throw new NotFoundError("Оборудование не найдено");
   }
 
-  return requestsRepository.findByEquipmentId(equipmentId);
+  return requestsRepository.findByEquipmentId(equipmentId, options);
 }
 
 export async function createRequest(data) {
-  const equipment = await equipmentRepository.findById(
-    data.equipmentId
-  );
+  const equipment = await equipmentRepository.findById(data.equipmentId);
 
   if (!equipment) {
-    throw new NotFoundError("Оборудование не найдено.");
+    throw new NotFoundError("Оборудование не найдено");
   }
 
-  const now = new Date().toISOString();
-
-  const request = {
+  return requestsRepository.create({
     id: randomUUID(),
     equipmentId: data.equipmentId,
     title: data.title,
     description: data.description || "",
     priority: data.priority,
     status: "new",
-    plannedAt: data.plannedAt,
-    createdAt: now,
-    updatedAt: now
-  };
-
-  return requestsRepository.create(request);
+    plannedAt: data.plannedAt ?? null,
+    author: data.author || "system"
+  });
 }
 
 export async function updateRequest(id, data) {
   const existing = await requestsRepository.findById(id);
 
   if (!existing) {
-    throw new NotFoundError("Заявка не найдена.");
+    throw new NotFoundError("Заявка не найдена");
   }
 
-  const changes = {
-    ...data,
-    updatedAt: new Date().toISOString()
-  };
-
-  return requestsRepository.update(id, changes);
+  return requestsRepository.update(id, data);
 }
 
-export async function updateRequestStatus(id, status) {
-  const existing = await requestsRepository.findById(id);
+export async function updateRequestStatus(id, status, author = "system", comment = null) {
+  return sequelize.transaction(async transaction => {
+    const request = await requestsRepository.findById(id);
 
-  if (!existing) {
-    throw new NotFoundError("Заявка не найдена.");
-  }
+    if (!request) {
+      throw new NotFoundError("Заявка не найдена");
+    }
 
-  const allowed = allowedTransitions[existing.status] || [];
+    const currentStatus = request.status;
 
-  if (!allowed.includes(status)) {
-    throw new ConflictError(
-      `Недопустимый переход статуса: ${existing.status} → ${status}.`
+    if (!allowedTransitions[currentStatus]?.includes(status)) {
+      throw new ConflictError(
+        `Недопустимый переход статуса: ${currentStatus} -> ${status}`
+      );
+    }
+
+    if (currentStatus === "new" && status === "in_progress") {
+      const assignees = await requestsRepository.findAssignees(id);
+
+      if (assignees.length === 0) {
+        throw new ConflictError(
+          "Нельзя перевести заявку в работу без назначенных техников"
+        );
+      }
+
+      const leadCount = assignees.filter(item => item.role === "lead").length;
+
+      if (leadCount !== 1) {
+        throw new ConflictError(
+          "Для заявки должен быть назначен ровно один lead-техник"
+        );
+      }
+    }
+
+    await requestsRepository.update(
+      id,
+      { status },
+      transaction
     );
-  }
 
-  return requestsRepository.update(id, {
-    status,
-    updatedAt: new Date().toISOString()
+    await requestHistoryRepository.create(
+      {
+        id: randomUUID(),
+        requestId: id,
+        previousStatus: currentStatus,
+        newStatus: status,
+        author,
+        comment,
+        changedAt: new Date()
+      },
+      transaction
+    );
+
+    return requestsRepository.findById(id);
   });
 }
 
@@ -190,12 +128,141 @@ export async function deleteRequest(id) {
   const existing = await requestsRepository.findById(id);
 
   if (!existing) {
-    throw new NotFoundError("Заявка не найдена.");
+    throw new NotFoundError("Заявка не найдена");
   }
 
-  return requestsRepository.remove(id);
+  await requestsRepository.remove(id);
+
+  return existing;
 }
 
-export function getAllowedTransitions() {
-  return allowedTransitions;
+export function getAllowedTransitions(status) {
+  return allowedTransitions[status] || [];
+}
+
+export async function getRequestHistory(id) {
+  const request = await requestsRepository.findById(id);
+
+  if (!request) {
+    throw new NotFoundError("Заявка не найдена");
+  }
+
+  return requestHistoryRepository.findByRequestId(id);
+}
+
+export async function addRequestAssignee(
+  requestId,
+  userId,
+  role,
+  plannedHours
+) {
+  return sequelize.transaction(async transaction => {
+    const request = await requestsRepository.findById(requestId);
+
+    if (!request) {
+      throw new NotFoundError("Заявка не найдена");
+    }
+
+    const technician = await requestAssigneeRepository.findTechnicianById(
+      userId,
+      transaction
+    );
+
+    if (!technician) {
+      throw new NotFoundError("Техник не найден");
+    }
+
+    if (!["lead", "member"].includes(role)) {
+      throw new ValidationError(
+        "Роль должна быть lead или member"
+      );
+    }
+
+    const existing = await requestAssigneeRepository.findByRequestAndTechnician(
+      requestId,
+      userId,
+      transaction
+    );
+
+    if (existing) {
+      throw new ConflictError(
+        "Техник уже назначен на эту заявку"
+      );
+    }
+
+    const currentAssignees =
+      await requestAssigneeRepository.findByRequestId(
+        requestId,
+        transaction
+      );
+
+    const finalLeadCount =
+      currentAssignees.filter(item => item.role === "lead").length +
+      (role === "lead" ? 1 : 0);
+
+    if (finalLeadCount !== 1) {
+      throw new ValidationError(
+        "У заявки должен быть ровно один lead-техник"
+      );
+    }
+
+    await requestAssigneeRepository.create(
+      {
+        id: randomUUID(),
+        requestId,
+        technicianId: userId,
+        role,
+        hours: plannedHours ?? 0
+      },
+      transaction
+    );
+
+    return requestsRepository.findById(requestId);
+  });
+}
+
+export async function removeRequestAssignee(requestId, userId) {
+  return sequelize.transaction(async transaction => {
+    const request = await requestsRepository.findById(requestId);
+
+    if (!request) {
+      throw new NotFoundError("Заявка не найдена");
+    }
+
+    const existing = await requestAssigneeRepository.findByRequestAndTechnician(
+      requestId,
+      userId,
+      transaction
+    );
+
+    if (!existing) {
+      throw new NotFoundError("Назначение не найдено");
+    }
+
+    const currentAssignees =
+      await requestAssigneeRepository.findByRequestId(
+        requestId,
+        transaction
+      );
+
+    const finalLeadCount = currentAssignees.filter(
+      item =>
+        item.role === "lead" &&
+        item.technicianId !== userId
+    ).length;
+
+    if (finalLeadCount !== 1) {
+      throw new ValidationError(
+        "Нельзя удалить техника: у заявки должен остаться ровно один lead"
+      );
+    }
+
+    await requestAssigneeRepository.remove(
+      requestId,
+      userId,
+      transaction
+    );
+
+    return requestsRepository.findById(requestId);
+  });
 }

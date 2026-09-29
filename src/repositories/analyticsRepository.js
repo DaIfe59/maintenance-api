@@ -41,7 +41,18 @@ export async function getSiteSummary(siteId) {
 
         COUNT(DISTINCT mr.id) FILTER (
           WHERE mr.priority = 'critical'
-        )::int AS critical_priority
+        )::int AS critical_priority,
+
+        ROUND(
+          AVG(
+            EXTRACT(
+              EPOCH FROM (
+                done_history.changed_at - mr."createdAt"
+              )
+            ) / 3600
+          )::numeric,
+          2
+        ) AS average_close_hours
 
       FROM sites s
 
@@ -50,6 +61,10 @@ export async function getSiteSummary(siteId) {
 
       LEFT JOIN maintenance_requests mr
         ON mr.equipment_id = e.id
+
+      LEFT JOIN request_status_history done_history
+        ON done_history.request_id = mr.id
+        AND done_history.new_status = 'done'
 
       WHERE s.id = :siteId
 

@@ -1,22 +1,24 @@
 import pino from "pino";
+import config from "../config/config.js";
 
 const logger = pino({
-  level: process.env.LOG_LEVEL || "info"
+  level: config.logLevel
 });
 
 export function requestLogger(req, res, next) {
   const startedAt = Date.now();
 
   res.on("finish", () => {
-    const duration = Date.now() - startedAt;
-
-    logger.info({
-      requestId: req.requestId,
-      method: req.method,
-      path: req.originalUrl,
-      statusCode: res.statusCode,
-      durationMs: duration
-    }, "HTTP request");
+    logger.info(
+      {
+        requestId: req.requestId,
+        method: req.method,
+        path: req.originalUrl,
+        statusCode: res.statusCode,
+        durationMs: Date.now() - startedAt
+      },
+      "HTTP request"
+    );
   });
 
   next();

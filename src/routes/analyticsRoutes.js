@@ -3,8 +3,11 @@ import {
   getSiteSummary,
   getEquipmentLoad
 } from "../controllers/analyticsController.js";
+import { authenticate } from "../middlewares/auth.js";
 
 const router = Router();
+
+router.use(authenticate);
 
 router.get(
   "/sites/:id/summary",

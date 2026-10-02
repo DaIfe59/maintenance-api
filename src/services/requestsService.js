@@ -67,7 +67,12 @@ export async function updateRequest(id, data) {
   return requestsRepository.update(id, data);
 }
 
-export async function updateRequestStatus(id, status, author = "system", comment = null) {
+export async function updateRequestStatus(
+  id,
+  status,
+  user,
+  comment = null
+) {
   return sequelize.transaction(async transaction => {
     const request = await requestsRepository.findById(id);
 
@@ -83,8 +88,33 @@ export async function updateRequestStatus(id, status, author = "system", comment
       );
     }
 
-    if (currentStatus === "new" && status === "in_progress") {
-      const assignees = await requestsRepository.findAssignees(id);
+    if (user.role === "technician") {
+  if (!user.technicianId) {
+    throw new ConflictError(
+      "У пользователя не указан техник"
+    );
+  }
+
+  const assignees =
+    await requestsRepository.findAssignees(id);
+
+  const assigned = assignees.some(
+    item => item.id === user.technicianId
+  );
+
+  if (!assigned) {
+    throw new ConflictError(
+      "Техник не назначен на эту заявку"
+    );
+  }
+}
+
+    if (
+      currentStatus === "new" &&
+      status === "in_progress"
+    ) {
+      const assignees =
+        await requestsRepository.findAssignees(id);
 
       if (assignees.length === 0) {
         throw new ConflictError(
@@ -92,7 +122,9 @@ export async function updateRequestStatus(id, status, author = "system", comment
         );
       }
 
-      const leadCount = assignees.filter(item => item.role === "lead").length;
+      const leadCount = assignees.filter(
+        item => item.RequestAssignee?.role === "lead"
+      ).length;
 
       if (leadCount !== 1) {
         throw new ConflictError(
@@ -113,7 +145,7 @@ export async function updateRequestStatus(id, status, author = "system", comment
         requestId: id,
         previousStatus: currentStatus,
         newStatus: status,
-        author,
+        author: user.email,
         comment,
         changedAt: new Date()
       },

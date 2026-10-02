@@ -24,8 +24,12 @@ import {
 import {
   requestsQuerySchema
 } from "../validators/queryValidator.js";
+import { authenticate } from "../middlewares/auth.js";
+import { requireRoles } from "../middlewares/roles.js";
 
 const router = Router();
+
+router.use(authenticate);
 
 router.get(
   "/",
@@ -37,6 +41,7 @@ router.get(
 
 router.post(
   "/",
+  requireRoles("technician", "admin"),
   validate({
     body: createRequestSchema
   }),
@@ -45,11 +50,13 @@ router.post(
 
 router.post(
   "/:id/assignees",
+  requireRoles("admin"),
   addRequestAssignee
 );
 
 router.delete(
   "/:id/assignees/:userId",
+  requireRoles("admin"),
   removeRequestAssignee
 );
 
@@ -68,6 +75,7 @@ router.get(
 
 router.patch(
   "/:id/status",
+  requireRoles("technician", "admin"),
   validate({
     params: requestIdSchema,
     body: statusSchema
@@ -77,6 +85,7 @@ router.patch(
 
 router.patch(
   "/:id",
+  requireRoles("technician", "admin"),
   validate({
     params: requestIdSchema,
     body: updateRequestSchema
@@ -86,6 +95,7 @@ router.patch(
 
 router.delete(
   "/:id",
+  requireRoles("admin"),
   validate({
     params: requestIdSchema
   }),

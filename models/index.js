@@ -5,6 +5,7 @@ import Technician from "./technician.js";
 import MaintenanceRequest from "./maintenanceRequest.js";
 import RequestStatusHistory from "./requestStatusHistory.js";
 import RequestAssignee from "./requestAssignee.js";
+import User from "./user.js";
 
 Site.hasMany(Equipment, {
   foreignKey: "siteId",
@@ -87,5 +88,6 @@ export {
   Technician,
   MaintenanceRequest,
   RequestStatusHistory,
-  RequestAssignee
+  RequestAssignee,
+  User
 };

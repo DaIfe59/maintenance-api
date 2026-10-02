@@ -43,7 +43,14 @@ const config = {
   dbUser: process.env.DB_USER || "maintenance",
   dbPassword: process.env.DB_PASSWORD || "maintenance",
   dbPoolMin: Number(process.env.DB_POOL_MIN || 0),
-  dbPoolMax: Number(process.env.DB_POOL_MAX || 10)
+  dbPoolMax: Number(process.env.DB_POOL_MAX || 10),
+
+  authAccessSecret: process.env.AUTH_ACCESS_SECRET,
+  authAccessExpiresIn: process.env.AUTH_ACCESS_EXPIRES_IN || "15m",
+  authRefreshSecret: process.env.AUTH_REFRESH_SECRET,
+  authRefreshExpiresIn: process.env.AUTH_REFRESH_EXPIRES_IN || "7d",
+
+  
 };
 
 export default config;

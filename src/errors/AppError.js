@@ -26,9 +26,32 @@ export class ValidationError extends AppError {
 }
 
 export class ConflictError extends AppError {
-  constructor(message = "Конфликт данных", details = []) {
+  constructor(
+    message = "Конфликт данных",
+    details = []
+  ) {
     super(message, 409, "CONFLICT", details);
     this.name = "ConflictError";
+  }
+}
+
+export class UnauthorizedError extends AppError {
+  constructor(
+    message = "Требуется аутентификация",
+    details = []
+  ) {
+    super(message, 401, "UNAUTHORIZED", details);
+    this.name = "UnauthorizedError";
+  }
+}
+
+export class ForbiddenError extends AppError {
+  constructor(
+    message = "Недостаточно прав",
+    details = []
+  ) {
+    super(message, 403, "FORBIDDEN", details);
+    this.name = "ForbiddenError";
   }
 }
 

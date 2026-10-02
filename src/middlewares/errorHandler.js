@@ -1,14 +1,12 @@
-import { AppError } from "../errors/AppError.js";
+import { AppError, NotFoundError } from "../errors/AppError.js";
 import { getLogger } from "./logger.js";
 
 const logger = getLogger();
 
 export function notFoundHandler(req, res, next) {
   next(
-    new AppError(
-      `Маршрут ${req.method} ${req.originalUrl} не найден`,
-      404,
-      "NOT_FOUND"
+    new NotFoundError(
+      `Маршрут ${req.method} ${req.originalUrl} не найден`
     )
   );
 }
@@ -16,13 +14,17 @@ export function notFoundHandler(req, res, next) {
 export function errorHandler(err, req, res, next) {
   const requestId = req.requestId;
 
-  logger.error({
-    requestId,
-    method: req.method,
-    path: req.originalUrl,
-    error: err.message,
-    stack: err.stack
-  }, "Request error");
+  logger.error(
+    {
+      requestId,
+      method: req.method,
+      path: req.originalUrl,
+      statusCode: err.statusCode,
+      error: err.message,
+      stack: err.stack
+    },
+    "Request error"
+  );
 
   if (err instanceof AppError) {
     return res.status(err.statusCode).json({
@@ -30,6 +32,17 @@ export function errorHandler(err, req, res, next) {
         code: err.code,
         message: err.message,
         details: err.details,
+        requestId
+      }
+    });
+  }
+
+  if (err instanceof SyntaxError && err.status === 400) {
+    return res.status(400).json({
+      error: {
+        code: "INVALID_JSON",
+        message: "Некорректный JSON в теле запроса",
+        details: [],
         requestId
       }
     });

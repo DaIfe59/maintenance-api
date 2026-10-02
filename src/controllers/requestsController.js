@@ -56,19 +56,19 @@ export async function updateRequest(req, res) {
   });
 }
 
-export async function updateRequestStatus(req, res) {
-  const id = req.validated?.params?.id || req.params.id;
-  const data = req.validated?.body || req.body;
-
-  const request =
-    await requestsService.updateRequestStatus(
-      id,
-      data.status
+export async function updateRequestStatus(req, res, next) {
+  try {
+    const result = await requestsService.updateRequestStatus(
+      req.params.id,
+      req.body.status,
+      req.user,
+      req.body.comment || null
     );
 
-  res.json({
-    data: request
-  });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
 }
 
 export async function deleteRequest(req, res) {

@@ -1,24 +1,24 @@
 import * as equipmentService from "../services/equipmentService.js";
-
 import {
   getRequestsByEquipmentId
 } from "../services/requestsService.js";
-
 import {
   getWeatherForEquipment
 } from "../services/weatherService.js";
 
-
 export async function getEquipment(req, res) {
-  const result =
-    await equipmentService.getEquipmentList(req.query);
+  const result = await equipmentService.getEquipmentList(
+    req.validated?.query || req.query
+  );
 
   res.json(result);
 }
 
 export async function getEquipmentById(req, res) {
+  const id = req.validated?.params?.id || req.params.id;
+
   const equipment =
-    await equipmentService.getEquipmentById(req.params.id);
+    await equipmentService.getEquipmentById(id);
 
   res.json({
     data: equipment
@@ -26,8 +26,10 @@ export async function getEquipmentById(req, res) {
 }
 
 export async function createEquipment(req, res) {
+  const data = req.validated?.body || req.body;
+
   const equipment =
-    await equipmentService.createEquipment(req.body);
+    await equipmentService.createEquipment(data);
 
   res
     .status(201)
@@ -38,11 +40,11 @@ export async function createEquipment(req, res) {
 }
 
 export async function updateEquipment(req, res) {
+  const id = req.validated?.params?.id || req.params.id;
+  const data = req.validated?.body || req.body;
+
   const equipment =
-    await equipmentService.updateEquipment(
-      req.params.id,
-      req.body
-    );
+    await equipmentService.updateEquipment(id, data);
 
   res.json({
     data: equipment
@@ -50,14 +52,18 @@ export async function updateEquipment(req, res) {
 }
 
 export async function deleteEquipment(req, res) {
-  await equipmentService.deleteEquipment(req.params.id);
+  const id = req.validated?.params?.id || req.params.id;
+
+  await equipmentService.deleteEquipment(id);
 
   res.status(204).send();
 }
 
 export async function getEquipmentRequests(req, res) {
+  const id = req.validated?.params?.id || req.params.id;
+
   const requests =
-    await getRequestsByEquipmentId(req.params.id);
+    await getRequestsByEquipmentId(id);
 
   res.json({
     data: requests,
@@ -70,8 +76,10 @@ export async function getEquipmentRequests(req, res) {
 }
 
 export async function getEquipmentWeather(req, res) {
+  const id = req.validated?.params?.id || req.params.id;
+
   const weather =
-    await getWeatherForEquipment(req.params.id);
+    await getWeatherForEquipment(id);
 
   res.json({
     data: weather

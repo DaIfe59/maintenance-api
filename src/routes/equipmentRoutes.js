@@ -18,9 +18,16 @@ import {
   equipmentIdSchema
 } from "../validators/equipmentValidator.js";
 
-import { equipmentQuerySchema } from "../validators/queryValidator.js";
+import {
+  equipmentQuerySchema
+} from "../validators/queryValidator.js";
+
+import { authenticate } from "../middlewares/auth.js";
+import { requireRoles } from "../middlewares/roles.js";
 
 const router = Router();
+
+router.use(authenticate);
 
 router.get(
   "/",
@@ -32,6 +39,7 @@ router.get(
 
 router.post(
   "/",
+  requireRoles("admin"),
   validate({
     body: createEquipmentSchema
   }),
@@ -64,6 +72,7 @@ router.get(
 
 router.patch(
   "/:id",
+  requireRoles("admin"),
   validate({
     params: equipmentIdSchema,
     body: updateEquipmentSchema
@@ -73,6 +82,7 @@ router.patch(
 
 router.delete(
   "/:id",
+  requireRoles("admin"),
   validate({
     params: equipmentIdSchema
   }),
